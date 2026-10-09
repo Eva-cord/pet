@@ -1,0 +1,594 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>寵物美容師管理系統 MVP - 圖表完美修復版</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        body { font-family: 'PingFang TC', 'Microsoft JhengHei', sans-serif; background-color: #f3f4f6; }
+        .fade-enter-active, .fade-leave-active { transition: opacity 0.2s ease; }
+        .fade-enter-from, .fade-leave-to { opacity: 0; }
+        .scrollbar-hide::-webkit-scrollbar { display: none; }
+        .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
+        .edit-input { width: 100%; border: 1px dashed #10b981; background-color: #ecfdf5; border-radius: 4px; padding: 2px 6px; outline: none; }
+        .edit-input:focus { border: 1px solid #059669; background-color: #fff; }
+        .edit-textarea { width: 100%; border: 1px dashed #10b981; background-color: #ecfdf5; border-radius: 4px; padding: 6px; outline: none; resize: vertical; min-height: 60px; }
+    </style>
+</head>
+<body>
+    <div id="app" class="flex h-screen overflow-hidden">
+        
+        <!-- 左側導覽列 -->
+        <aside class="w-64 bg-slate-800 text-white flex flex-col shadow-xl z-10 shrink-0">
+            <div class="p-6 text-xl font-bold border-b border-slate-700 flex items-center gap-3">
+                <i class="fa-solid fa-paw text-emerald-400"></i>
+                <div>
+                    <div>毛孩沙龍</div>
+                    <div class="text-xs text-slate-400 font-normal mt-1">系統管理後台 MVP</div>
+                </div>
+            </div>
+            
+            <nav class="flex-1 p-4 space-y-2">
+                <button @click="changeView('schedule')" :class="['w-full text-left px-4 py-3 rounded-lg flex items-center gap-3 transition-colors', currentView === 'schedule' ? 'bg-emerald-600 text-white shadow' : 'text-slate-300 hover:bg-slate-700 hover:text-white']">
+                    <i class="fa-regular fa-calendar-check w-5 text-center text-lg"></i> <span class="font-medium">預約排程</span>
+                </button>
+                <button @click="changeView('pets')" :class="['w-full text-left px-4 py-3 rounded-lg flex items-center gap-3 transition-colors', currentView === 'pets' ? 'bg-emerald-600 text-white shadow' : 'text-slate-300 hover:bg-slate-700 hover:text-white']">
+                    <i class="fa-solid fa-dog w-5 text-center text-lg"></i> <span class="font-medium">毛孩與客戶搜尋</span>
+                </button>
+                <button @click="changeView('report')" :class="['w-full text-left px-4 py-3 rounded-lg flex items-center gap-3 transition-colors', currentView === 'report' ? 'bg-emerald-600 text-white shadow' : 'text-slate-300 hover:bg-slate-700 hover:text-white']">
+                    <i class="fa-solid fa-chart-bar w-5 text-center text-lg"></i> <span class="font-medium">營收與數據</span>
+                </button>
+            </nav>
+
+            <div class="p-4 border-t border-slate-700 flex items-center justify-between bg-slate-900/50">
+                <div class="flex items-center gap-3">
+                    <div class="w-8 h-8 rounded-full bg-emerald-500 flex items-center justify-center text-white font-bold text-sm shadow">S</div>
+                    <div class="text-sm text-slate-300 font-medium">Hi, Sunny</div>
+                </div>
+                <button @click="changeView('groomerProfile')" class="text-slate-400 hover:text-white hover:bg-slate-700 p-2 rounded-lg transition-colors" title="系統與美容師設置">
+                    <i class="fa-solid fa-gear fa-lg"></i>
+                </button>
+            </div>
+        </aside>
+
+        <!-- 右側主要內容區 -->
+        <main class="flex-1 overflow-y-auto bg-slate-50 relative">
+            
+            <div class="sticky top-0 z-20 bg-white/80 backdrop-blur-md border-b border-slate-200 px-8 py-3 flex justify-between items-center">
+                <div class="text-sm text-slate-500 font-medium">目前頁面：{{ viewTitle }}</div>
+                <button @click="isEditing = !isEditing" :class="['px-4 py-1.5 rounded-full text-sm font-bold shadow-sm transition-colors border', isEditing ? 'bg-emerald-100 text-emerald-700 border-emerald-300' : 'bg-white text-slate-600 border-slate-300 hover:bg-slate-50']">
+                    <i :class="isEditing ? 'fa-solid fa-check' : 'fa-solid fa-pen'"></i> 
+                    {{ isEditing ? '完成編輯' : '進入編輯模式' }}
+                </button>
+            </div>
+
+            <!-- 加入 @after-enter 確保轉場結束後才呼叫畫圖，100% 解決圖表出不來的 bug -->
+            <transition name="fade" mode="out-in" @after-enter="onTransitionEnd">
+                
+                <!-- ================= 畫面 1: 排程 ================= -->
+                <div v-if="currentView === 'schedule'" class="p-8 max-w-6xl mx-auto" key="schedule">
+                    <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
+                        <div>
+                            <h1 class="text-3xl font-bold text-slate-800">預約排程</h1>
+                            <p v-if="scheduleTab === 'today'" class="text-sm font-bold text-emerald-600 mt-2 bg-emerald-50 px-3 py-1 rounded-lg inline-block">
+                                <i class="fa-solid fa-clock"></i> 今日預估總工作量：{{ todayTotalHours }} 小時
+                            </p>
+                        </div>
+                        <div class="flex items-center gap-4">
+                            <button @click="alert('開啟排程調整模式（拖曳或手動編輯時段）')" class="px-4 py-2 border border-slate-300 bg-white rounded-lg text-sm font-bold text-slate-600 hover:bg-slate-50 flex items-center gap-2">
+                                <i class="fa-solid fa-sliders"></i> 手動調整時段
+                            </button>
+                            <div class="flex bg-slate-200 rounded-lg p-1 shadow-inner">
+                                <button @click="scheduleTab = 'today'" :class="['px-6 py-2 rounded-md text-sm font-bold transition-colors', scheduleTab === 'today' ? 'bg-white shadow text-slate-800' : 'text-slate-500 hover:text-slate-700']">今日排程</button>
+                                <button @click="scheduleTab = 'week'" :class="['px-6 py-2 rounded-md text-sm font-bold transition-colors', scheduleTab === 'week' ? 'bg-white shadow text-slate-800' : 'text-slate-500 hover:text-slate-700']">本週預覽</button>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="space-y-4">
+                        <div v-for="apt in filteredSchedule" :key="apt.id" @click="goToProfile(apt.customerId, apt.petId)" class="bg-white rounded-xl shadow-sm border border-slate-200 p-4 hover:shadow-md hover:border-emerald-400 transition-all cursor-pointer flex flex-col md:flex-row md:items-center gap-4 md:gap-6">
+                            <div class="flex flex-col items-center justify-center w-24 md:border-r border-slate-100 md:pr-4">
+                                <span v-if="scheduleTab === 'week'" class="text-xs text-slate-400 font-bold mb-1 bg-slate-100 px-2 py-0.5 rounded">{{ apt.dateLabel }}</span>
+                                <span class="text-2xl font-black text-slate-700">{{ apt.time }}</span>
+                                <span class="text-xs font-bold text-slate-400 mt-1"><i class="fa-solid fa-hourglass-half text-slate-300"></i> {{ apt.estimatedMinutes }}m</span>
+                            </div>
+                            <div class="flex-1">
+                                <div class="flex items-center gap-3 mb-2">
+                                    <span class="text-xl font-bold text-slate-800">{{ getPet(apt.petId).name }}</span>
+                                    <span class="text-sm font-medium text-slate-500 bg-slate-100 px-2 py-0.5 rounded">{{ getPet(apt.petId).breed }}</span>
+                                </div>
+                                <div class="text-sm text-slate-500 flex flex-wrap items-center gap-4">
+                                    <span><i class="fa-solid fa-user mr-1 text-slate-400"></i> {{ getCustomer(apt.customerId).name }}</span>
+                                    <span class="bg-amber-100 text-amber-700 px-2 py-0.5 rounded text-xs font-bold">{{ getCustomer(apt.customerId).projectType }}</span>
+                                </div>
+                            </div>
+                            <div class="flex gap-2 max-w-md flex-wrap justify-end">
+                                <span v-if="getPet(apt.petId).recentMedication && getPet(apt.petId).recentMedication !== '無'" class="px-2 py-1 rounded-md text-xs font-bold bg-blue-50 text-blue-600 border border-blue-100">
+                                    <i class="fa-solid fa-pills mr-1"></i>用藥中
+                                </span>
+                                <span v-for="alert in getPet(apt.petId).alerts" :key="alert" class="px-2 py-1 rounded-md text-xs font-bold bg-red-50 text-red-600 border border-red-100">
+                                    <i class="fa-solid fa-triangle-exclamation mr-1"></i>{{ alert }}
+                                </span>
+                            </div>
+                            <div class="text-slate-300 hidden md:block"><i class="fa-solid fa-chevron-right fa-lg"></i></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ================= 畫面 2: 毛孩與客戶搜尋 ================= -->
+                <div v-else-if="currentView === 'pets'" class="p-8 max-w-6xl mx-auto" key="pets">
+                    <div class="flex justify-between items-center mb-8">
+                        <h1 class="text-3xl font-bold text-slate-800">毛孩與客戶搜尋</h1>
+                        <div class="relative">
+                            <i class="fa-solid fa-search absolute left-4 top-3 text-slate-400"></i>
+                            <input v-model="searchQuery" type="text" placeholder="搜尋毛孩、犬種、飼主姓名、電話..." class="pl-11 pr-4 py-2.5 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 w-96 shadow-sm text-sm">
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                        <div v-for="pet in filteredPets" :key="pet.id" @click="goToProfile(getCustomer(customers.find(c => c.pets.includes(pet.id)).id).id, pet.id)" class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 hover:shadow-lg hover:border-emerald-400 transition-all cursor-pointer flex flex-col justify-between">
+                            <div>
+                                <div class="flex justify-between items-start mb-4 border-b border-slate-100 pb-4">
+                                    <div>
+                                        <div class="flex items-end gap-3 mb-1">
+                                            <h2 class="text-2xl font-black text-slate-800">{{ pet.name }}</h2>
+                                            <span class="text-sm font-bold text-slate-500 bg-slate-100 px-2 py-1 rounded">{{ pet.breed }}</span>
+                                        </div>
+                                        <p class="text-sm text-slate-400 font-bold mt-2">
+                                            <i class="fa-solid fa-user mr-1 text-slate-300"></i> 
+                                            飼主：{{ getCustomer(customers.find(c => c.pets.includes(pet.id)).id).name }} ({{ getCustomer(customers.find(c => c.pets.includes(pet.id)).id).phone }})
+                                        </p>
+                                    </div>
+                                    <div class="text-right">
+                                        <span class="bg-emerald-100 text-emerald-800 px-3 py-1 rounded text-xs font-bold">{{ pet.projectType }}</span>
+                                    </div>
+                                </div>
+                                <div class="mb-5 space-y-2">
+                                    <div v-if="pet.alerts.length > 0" class="flex gap-2 flex-wrap">
+                                        <span v-for="alert in pet.alerts" :key="alert" class="px-2 py-1 rounded-md text-xs font-bold bg-red-50 text-red-600 border border-red-100">
+                                            <i class="fa-solid fa-triangle-exclamation mr-1"></i>{{ alert }}
+                                        </span>
+                                    </div>
+                                    <p class="text-sm text-slate-700 font-medium">
+                                        <span class="font-bold text-slate-400">上次服務：</span>
+                                        <span v-if="pet.history.length > 0">{{ pet.history[0].date }} - {{ pet.history[0].mainService }}</span>
+                                        <span v-else>無紀錄</span>
+                                    </p>
+                                </div>
+                            </div>
+                            <button class="w-full bg-slate-100 text-slate-600 border border-slate-200 rounded-lg py-2.5 flex justify-center items-center gap-2 font-bold hover:bg-emerald-50 hover:text-emerald-700 hover:border-emerald-200 transition-colors shadow-sm" @click.stop="goToProfile(getCustomer(customers.find(c => c.pets.includes(pet.id)).id).id, pet.id)">
+                                <i class="fa-solid fa-folder-open"></i> 進入毛孩專屬檔案
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ================= 畫面 3: 毛孩專屬資料 (以寵物為中心) ================= -->
+                <div v-else-if="currentView === 'profile' && activePet" class="p-8 max-w-6xl mx-auto" key="profile">
+                    <button @click="currentView = previousView" class="mb-6 text-slate-500 hover:text-slate-900 font-medium flex items-center gap-2 transition-colors bg-white px-4 py-2 rounded-lg border border-slate-200 shadow-sm w-max">
+                        <i class="fa-solid fa-arrow-left"></i> 返回
+                    </button>
+
+                    <!-- 毛孩關鍵資訊 (10秒內掌握) -->
+                    <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-6 mb-6 relative overflow-hidden">
+                        <div class="absolute top-0 right-0 w-32 h-32 bg-emerald-50 rounded-bl-full -z-10"></div>
+                        <div class="flex justify-between items-start mb-6 border-b border-slate-100 pb-4">
+                            <div class="flex items-end gap-4">
+                                <h2 class="text-3xl font-black text-slate-800">
+                                    <input v-if="isEditing" v-model="activePet.name" class="edit-input w-32">
+                                    <span v-else>{{ activePet.name }}</span>
+                                </h2>
+                                <span class="text-lg font-bold text-slate-500 bg-slate-100 px-3 py-1 rounded">
+                                    <input v-if="isEditing" v-model="activePet.breed" class="edit-input w-24">
+                                    <span v-else>{{ activePet.breed }}</span>
+                                </span>
+                            </div>
+                            <span v-if="isEditing" class="text-xs bg-emerald-100 text-emerald-700 px-2 py-1 rounded animate-pulse font-bold">編輯模式啟用中</span>
+                        </div>
+
+                        <div class="grid grid-cols-2 md:grid-cols-4 gap-6 mb-6">
+                            <div><p class="text-xs font-bold text-slate-400 mb-1">年齡 / 性別 / 體重</p>
+                                <p class="text-base font-bold text-slate-800">
+                                    <span v-if="isEditing"><input v-model="activePet.age" class="edit-input w-12"> / <input v-model="activePet.gender" class="edit-input w-12"> / <input v-model="activePet.weight" class="edit-input w-16"></span>
+                                    <span v-else>{{ activePet.age }} / {{ activePet.gender }} / {{ activePet.weight }}</span>
+                                </p>
+                            </div>
+                            <div class="col-span-2">
+                                <p class="text-xs font-bold text-slate-400 mb-1">服務前提醒 (近期用藥 / 行為注意事項)</p>
+                                <div class="flex flex-col gap-1">
+                                    <p class="text-sm font-bold text-blue-700 bg-blue-50 px-2 py-1 rounded w-max border border-blue-100"><i class="fa-solid fa-pills mr-1"></i>近期用藥：<input v-if="isEditing" v-model="activePet.recentMedication" class="edit-input w-48 text-blue-700"> <span v-else>{{ activePet.recentMedication }}</span></p>
+                                    <p class="text-sm font-bold text-red-700 bg-red-50 px-2 py-1 rounded w-max border border-red-100"><i class="fa-solid fa-triangle-exclamation mr-1"></i>行為注意：<input v-if="isEditing" v-model="activePet.behaviorNotes" class="edit-input w-48 text-red-700"> <span v-else>{{ activePet.behaviorNotes }}</span></p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                            <div class="bg-red-50 p-4 rounded-lg border border-red-100">
+                                <p class="text-sm font-bold text-red-400 mb-1">疾病史</p>
+                                <textarea v-if="isEditing" v-model="activePet.diseaseHistory" class="edit-textarea font-bold text-red-700"></textarea>
+                                <p v-else class="text-sm font-bold text-red-700">{{ activePet.diseaseHistory }}</p>
+                            </div>
+                            <div class="bg-amber-50 p-4 rounded-lg border border-amber-100">
+                                <p class="text-sm font-bold text-amber-500 mb-1">個性與毛孩偏好</p>
+                                <textarea v-if="isEditing" v-model="activePet.personality" class="edit-textarea font-bold text-amber-700 mb-1" placeholder="個性"></textarea>
+                                <textarea v-if="isEditing" v-model="activePet.preferences" class="edit-textarea font-bold text-amber-700" placeholder="喜歡/討厭什麼"></textarea>
+                                <p v-else class="text-sm font-bold text-amber-700">{{ activePet.personality }}。{{ activePet.preferences }}</p>
+                            </div>
+                            <div class="bg-emerald-50 p-4 rounded-lg border border-emerald-100">
+                                <p class="text-sm font-bold text-emerald-600 mb-1">飼主端要求與偏好 (不同家人要求/洗劑造型)</p>
+                                <textarea v-if="isEditing" v-model="activeCustomer.ownerPreferences" class="edit-textarea font-bold text-emerald-800"></textarea>
+                                <p v-else class="text-sm font-bold text-emerald-800">{{ activeCustomer.ownerPreferences }}</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 上次服務精華 (10秒內掌握) -->
+                    <div v-if="activePet.history.length > 0" class="bg-white rounded-xl shadow-sm border border-emerald-200 p-6 mb-6">
+                        <div class="flex justify-between items-center mb-4 border-b border-emerald-100 pb-2">
+                            <h3 class="font-black text-emerald-800 text-lg"><i class="fa-solid fa-clock-rotate-left mr-2"></i>上次服務紀錄與交接 ({{ activePet.history[0].date }})</h3>
+                        </div>
+                        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                            <div class="lg:col-span-2 space-y-4">
+                                <div class="grid grid-cols-2 gap-4">
+                                    <div><p class="text-xs font-bold text-slate-400 mb-1">主要項目與洗劑</p>
+                                        <p class="text-sm font-bold text-slate-800">{{ activePet.history[0].mainService }} / {{ activePet.history[0].shampoo }}</p>
+                                    </div>
+                                    <div><p class="text-xs font-bold text-slate-400 mb-1">上次造型要求</p>
+                                        <p class="text-sm font-bold text-slate-800">{{ activePet.history[0].styling }}</p>
+                                    </div>
+                                    <div><p class="text-xs font-bold text-slate-400 mb-1">內部備註 (僅美容師可見)</p>
+                                        <p class="text-sm font-bold text-slate-700">{{ activePet.history[0].internalNote }}</p>
+                                    </div>
+                                    <div><p class="text-xs font-bold text-slate-400 mb-1">上次額外費用</p>
+                                        <p class="text-sm font-bold text-amber-600">{{ activePet.history[0].extraFees }} (總計: ${{ activePet.history[0].totalPrice }})</p>
+                                    </div>
+                                </div>
+                                <div class="bg-slate-50 p-4 rounded-lg border border-slate-200">
+                                    <p class="text-sm font-bold text-slate-600 mb-2"><i class="fa-solid fa-clipboard-check mr-1"></i>交接清單 (接回時需告知事項)</p>
+                                    <label class="flex items-start gap-2 cursor-pointer">
+                                        <input type="checkbox" class="mt-1 w-4 h-4 text-emerald-600 rounded border-gray-300 focus:ring-emerald-500" v-model="activePet.history[0].handover.checked">
+                                        <span :class="['text-sm font-bold', activePet.history[0].handover.checked ? 'text-slate-400 line-through' : 'text-slate-800']">{{ activePet.history[0].handover.notes }}</span>
+                                    </label>
+                                </div>
+                            </div>
+                            <div v-if="activePet.history[0].photos && activePet.history[0].photos.length > 0">
+                                <p class="text-xs font-bold text-slate-400 mb-2">上次服務照片 (完工/造型紀錄)</p>
+                                <img :src="activePet.history[0].photos[0]" class="w-full h-32 object-cover rounded-lg border border-slate-200">
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 飼主聯絡資訊 -->
+                    <div class="bg-slate-50 rounded-xl shadow-sm border border-slate-200 p-6 mb-6">
+                        <div class="flex justify-between items-center mb-4">
+                            <h3 class="font-black text-slate-700 text-lg"><i class="fa-solid fa-user-circle mr-2"></i>飼主資訊</h3>
+                            <button class="bg-[#06C755] text-white px-3 py-1.5 rounded-lg font-bold flex items-center gap-2 shadow-sm text-sm hover:bg-[#05b34c]"><i class="fa-brands fa-line fa-lg"></i> 私訊客戶</button>
+                        </div>
+                        <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                            <div><p class="text-xs font-bold text-slate-400 mb-1">姓名 / 電話</p><p class="text-sm font-bold text-slate-800"><span v-if="isEditing"><input v-model="activeCustomer.name" class="edit-input w-16"> / <input v-model="activeCustomer.phone" class="edit-input w-24"></span><span v-else>{{ activeCustomer.name }} / {{ activeCustomer.phone }}</span></p></div>
+                            <div><p class="text-xs font-bold text-slate-400 mb-1">固定的上門的時間</p><p class="text-sm font-bold text-slate-800"><input v-if="isEditing" v-model="activeCustomer.fixedTime" class="edit-input w-full"><span v-else>{{ activeCustomer.fixedTime }}</span></p></div>
+                            <div><p class="text-xs font-bold text-slate-400 mb-1">美容方案</p><p class="text-sm font-bold text-amber-600"><input v-if="isEditing" v-model="activeCustomer.projectType" class="edit-input w-full"><span v-else>{{ activeCustomer.projectType }}</span></p></div>
+                        </div>
+                    </div>
+
+                    <!-- 其他同屬此客戶的毛孩 -->
+                    <div v-if="activeCustomer.pets.length > 1" class="mb-6">
+                        <p class="text-xs font-bold text-slate-400 mb-2">同家庭的其他毛孩：</p>
+                        <div class="flex gap-2">
+                            <button v-for="petId in activeCustomer.pets" :key="petId" v-show="petId !== activePet.id" @click="activePetId = petId" class="px-4 py-2 bg-white border border-slate-200 rounded-lg text-sm font-bold text-slate-600 hover:bg-emerald-50 hover:text-emerald-700 hover:border-emerald-200 transition-colors">
+                                切換至：{{ getPet(petId).name }}
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- 項目服務價目清單與完整歷史紀錄 -->
+                    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                        <div class="bg-purple-50 p-5 rounded-xl border border-purple-100">
+                            <div class="flex items-center gap-3 mb-4 border-b border-purple-200 pb-2">
+                                <h3 class="font-black text-purple-800 text-lg">項目服務價目清單</h3>
+                            </div>
+                            <div class="space-y-4">
+                                <div>
+                                    <p class="text-xs font-bold text-purple-500 mb-2">常態固定項目與價格：</p>
+                                    <div class="flex flex-wrap gap-2">
+                                        <span v-for="item in activePet.services.regular" class="bg-white text-purple-700 border border-purple-200 px-3 py-1 rounded-md text-sm font-bold shadow-sm flex items-center gap-1">
+                                            {{ item.name }} <span class="text-purple-400 text-xs">${{ item.price }}</span>
+                                        </span>
+                                    </div>
+                                </div>
+                                <div>
+                                    <p class="text-xs font-bold text-purple-500 mb-2">偶爾/特殊加價項目：</p>
+                                    <div class="flex flex-wrap gap-2">
+                                        <span v-for="item in activePet.services.occasional" class="bg-purple-600 text-white px-3 py-1 rounded-md text-sm font-bold shadow-sm flex items-center gap-1">
+                                            {{ item.name }} <span class="text-purple-200 text-xs">${{ item.price }}</span>
+                                        </span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div>
+                            <div class="flex justify-between items-center border-b border-slate-200 pb-2 mb-4">
+                                <h3 class="text-lg font-bold text-slate-800">完整歷史服務紀錄</h3>
+                                <button v-if="isEditing" @click="addHistoryRecord" class="text-xs bg-emerald-100 text-emerald-700 px-2 py-1 rounded font-bold hover:bg-emerald-200">
+                                    <i class="fa-solid fa-plus"></i> 新增紀錄
+                                </button>
+                            </div>
+                            <div class="space-y-4 max-h-96 overflow-y-auto pr-2">
+                                <div v-for="record in activePet.history" :key="record.id" class="border border-slate-200 rounded-lg p-4 bg-white">
+                                    <div class="flex justify-between items-start mb-2">
+                                        <div>
+                                            <span class="font-black text-slate-800 mr-2">{{ record.date }}</span>
+                                            <span class="bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded text-xs font-bold">{{ record.mainService }}</span>
+                                        </div>
+                                        <p class="text-base font-black text-emerald-600">${{ record.totalPrice }}</p>
+                                    </div>
+                                    <p class="text-xs text-slate-500 mb-2">洗劑：{{ record.shampoo }} | 造型：{{ record.styling }}</p>
+                                    <div class="bg-slate-50 p-2 rounded text-sm text-slate-700 space-y-1">
+                                        <p><span class="font-bold text-slate-400">備註：</span><span v-if="isEditing"><input v-model="record.internalNote" class="edit-input"></span><span v-else>{{ record.internalNote }}</span></p>
+                                        <p><span class="font-bold text-slate-400">交接：</span><span v-if="isEditing"><input v-model="record.handover.notes" class="edit-input"></span><span v-else>{{ record.handover.notes }}</span></p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ================= 畫面 4: 營收與數據 ================= -->
+                <div v-else-if="currentView === 'report'" class="p-8 max-w-6xl mx-auto w-full" key="report">
+                    <h1 class="text-3xl font-bold text-slate-800 mb-8 flex items-center gap-3">
+                        <i class="fa-solid fa-chart-pie text-emerald-500"></i> 營收與數據報表
+                    </h1>
+                    
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+                        <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 flex items-center gap-6">
+                            <div class="w-16 h-16 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 text-2xl"><i class="fa-solid fa-sack-dollar"></i></div>
+                            <div>
+                                <p class="text-sm font-bold text-slate-400 mb-1">本日營業額 (10/09)</p>
+                                <div class="flex items-baseline gap-2"><p class="text-4xl font-black text-slate-800">$ 4,800</p></div>
+                            </div>
+                        </div>
+                        <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 flex items-center gap-6">
+                            <div class="w-16 h-16 rounded-full bg-purple-100 flex items-center justify-center text-purple-600 text-2xl"><i class="fa-solid fa-money-bill-wave"></i></div>
+                            <div>
+                                <p class="text-sm font-bold text-slate-400 mb-1">本月累積營業額</p>
+                                <div class="flex items-baseline gap-2"><p class="text-4xl font-black text-slate-800">$ 85,200</p></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                        <!-- 長條圖容器 -->
+                        <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 lg:col-span-2">
+                            <h3 class="text-lg font-bold text-slate-800 mb-6">本月項目使用次數 (長條圖)</h3>
+                            <div class="relative w-full h-64">
+                                <canvas id="usageChart"></canvas>
+                            </div>
+                        </div>
+                        <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
+                            <h3 class="text-lg font-bold text-slate-800 mb-6">熱門加價排行</h3>
+                            <ul class="space-y-4">
+                                <li class="flex justify-between items-center border-b border-slate-100 pb-3"><span class="font-bold text-slate-700">1. 藥浴 SPA</span><span class="text-sm font-bold text-emerald-600">28 次</span></li>
+                                <li class="flex justify-between items-center border-b border-slate-100 pb-3"><span class="font-bold text-slate-700">2. 嚴重拆結</span><span class="text-sm font-bold text-emerald-600">15 次</span></li>
+                                <li class="flex justify-between items-center border-b border-slate-100 pb-3"><span class="font-bold text-slate-700">3. 廢毛處理</span><span class="text-sm font-bold text-emerald-600">12 次</span></li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ================= 畫面 5: 設置 / 美容師檔案 ================= -->
+                <div v-else-if="currentView === 'groomerProfile'" class="p-8 max-w-6xl mx-auto" key="groomerProfile">
+                    <h1 class="text-3xl font-bold text-slate-800 mb-8 flex items-center gap-3">
+                        <i class="fa-solid fa-gear text-slate-400"></i> 系統與美容師設置
+                    </h1>
+                    
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+                            <div class="bg-emerald-600 px-6 py-4 flex justify-between items-center">
+                                <h2 class="text-lg font-bold text-white flex items-center gap-2"><i class="fa-solid fa-id-badge"></i> 美容師檔案</h2>
+                                <span v-if="isEditing" class="text-xs bg-emerald-800 text-white px-2 py-1 rounded animate-pulse">編輯模式</span>
+                            </div>
+                            <div class="p-6 space-y-5">
+                                <div class="flex items-center gap-5 pb-5 border-b border-slate-100">
+                                    <div class="w-16 h-16 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center text-2xl font-black">S</div>
+                                    <div class="w-full pr-4">
+                                        <input v-if="isEditing" v-model="groomerProfile.name" class="edit-input text-2xl font-black text-slate-800 mb-1 w-full">
+                                        <p v-else class="text-2xl font-black text-slate-800">{{ groomerProfile.name }}</p>
+                                        <p class="text-sm font-bold text-emerald-600">資深美容師</p>
+                                    </div>
+                                </div>
+                                <div><p class="text-xs font-bold text-slate-400 mb-1">目前手裡有多少客戶名單</p><p class="text-xl font-bold text-slate-800">{{ customers.length }} 位客戶</p></div>
+                                <div><p class="text-xs font-bold text-slate-400 mb-1">工作時間</p>
+                                    <input v-if="isEditing" v-model="groomerProfile.workingHours" class="edit-input font-bold text-slate-800">
+                                    <p v-else class="text-base font-bold text-slate-800">{{ groomerProfile.workingHours }}</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 專屬的項目與價目表 -->
+                        <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+                            <div class="bg-slate-800 px-6 py-4">
+                                <h2 class="text-lg font-bold text-white flex items-center gap-2"><i class="fa-solid fa-list"></i> 店內項目與價目表</h2>
+                            </div>
+                            <div class="p-6">
+                                <p class="text-sm text-slate-500 mb-4">在此設定店內提供的服務項目與基本收費。</p>
+                                
+                                <div class="space-y-3 max-h-96 overflow-y-auto pr-2">
+                                    <div v-for="(item, index) in groomerProfile.storePriceList" :key="index" class="flex justify-between items-center bg-slate-50 border border-slate-200 px-4 py-2 rounded-lg">
+                                        <div class="flex-1">
+                                            <input v-if="isEditing" v-model="item.name" class="edit-input font-bold text-slate-700 w-full max-w-[200px]">
+                                            <span v-else class="font-bold text-slate-700">{{ item.name }}</span>
+                                        </div>
+                                        <div class="w-32 text-right flex items-center justify-end gap-1">
+                                            $ <input v-if="isEditing" v-model.number="item.price" type="number" class="edit-input font-bold text-emerald-600 w-20 text-right">
+                                            <span v-else class="font-bold text-emerald-600">{{ item.price }}</span>
+                                        </div>
+                                    </div>
+                                </div>
+                                <button v-if="isEditing" @click="groomerProfile.storePriceList.push({name: '新項目', price: 0})" class="mt-4 w-full py-2 border-2 border-dashed border-emerald-400 text-emerald-600 font-bold rounded-lg hover:bg-emerald-50">
+                                    <i class="fa-solid fa-plus"></i> 新增項目
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+            </transition>
+        </main>
+    </div>
+
+    <script>
+        const { createApp } = Vue;
+        
+        createApp({
+            data() {
+                return {
+                    currentView: 'schedule',
+                    previousView: 'schedule',
+                    scheduleTab: 'today',
+                    searchQuery: '',
+                    activeCustomerId: null,
+                    activePetId: null,
+                    chartInstance: null,
+                    
+                    isEditing: false,
+
+                    groomerProfile: {
+                        name: 'Sunny (小晴)',
+                        workingHours: '週二至週六 10:00 - 19:00',
+                        storePriceList: [
+                            { name: '基礎洗澡 (小型犬)', price: 500 },
+                            { name: '基礎洗澡 (中型犬)', price: 800 },
+                            { name: '全身大修 (小型犬)', price: 1200 },
+                            { name: '藥浴 SPA', price: 300 },
+                            { name: '嚴重拆結', price: 200 },
+                            { name: '除蚤滴劑', price: 150 }
+                        ]
+                    },
+
+                    customers: [
+                        { id: 'c1', name: '王大明', phone: '0912-345-678', pets: ['p1'], fixedTime: '每週六 14:00', projectType: '長期包月', ownerPreferences: '媽媽希望留貴賓腳，爸爸覺得難整理。偏好去油洗劑。' },
+                        { id: 'c2', name: '林心如', phone: '0922-111-222', pets: ['p2', 'p3'], fixedTime: '無固定', projectType: '短期單次', ownerPreferences: '不喜歡太香的洗劑，喜歡圓頭造型。' }
+                    ],
+                    pets: {
+                        'p1': { id: 'p1', name: '毛毛', breed: '紅貴賓', age: '3歲', gender: '公', weight: '4.5kg', 
+                            alerts: ['抗拒剪指甲', '右耳易發炎'], recentMedication: '上週有吃心絲蟲藥', behaviorNotes: '剪指甲會咬人，需戴頭套',
+                            diseaseHistory: '右耳易發炎', personality: '活潑', preferences: '喜歡吃雞肉泥', projectType: '長期包月',
+                            services: { regular: [{ name: '貴賓大修', price: 1200 }], occasional: [{ name: '藥浴 SPA', price: 300 }] },
+                            history: [{ id: 'h1', date: '2026-10-01', mainService: '大修 ($1200)', styling: '泰迪熊頭、貴賓腳', shampoo: '抗菌除蚤洗劑', photos: ['https://placehold.co/100x100/ecfdf5/059669?text=After'], totalPrice: 1500, extraFees: '拆結 +300', internalNote: '右耳很紅', handover: { checked: false, notes: '耳朵要點藥、發現小腫塊' } }]
+                        },
+                        'p2': { id: 'p2', name: '小白', breed: '比熊犬', age: '1歲', gender: '母', weight: '5.2kg', 
+                            alerts: [], recentMedication: '無', behaviorNotes: '吹毛會發抖，需安撫',
+                            diseaseHistory: '無', personality: '膽小', preferences: '摸下巴', projectType: '短期單次',
+                            services: { regular: [{ name: '洗澡', price: 500 }], occasional: [] }, 
+                            history: [{ id: 'h2', date: '2026-09-15', mainService: '洗澡 ($500)', styling: '修剪圓頭', shampoo: '燕麥舒敏洗劑', photos: [], totalPrice: 500, extraFees: '無', internalNote: '吹毛會抖', handover: { checked: true, notes: '很乖' } }]
+                        },
+                        'p3': { id: 'p3', name: '黑皮', breed: '柴犬', age: '5歲', gender: '公', weight: '12.5kg', 
+                            alerts: ['護食', '會咬人'], recentMedication: '腸胃藥使用中', behaviorNotes: '碰後腿會作勢攻擊',
+                            diseaseHistory: '腸胃炎', personality: '傲嬌', preferences: '討厭碰腿', projectType: '短期單次',
+                            services: { regular: [{ name: '中型犬洗澡', price: 800 }], occasional: [{ name: '廢毛處理', price: 300 }] }, 
+                            history: [{ id: 'h3', date: '2026-09-15', mainService: '洗澡 ($800)', styling: '順毛修剪', shampoo: '深層去污', photos: [], totalPrice: 1100, extraFees: '廢毛 +300', internalNote: '會咬人', handover: { checked: true, notes: '換毛季已處理' } }]
+                        }
+                    },
+                    schedule: [
+                        { id: 's1', dateLabel: '今天', time: '10:00', estimatedMinutes: 120, customerId: 'c1', petId: 'p1' },
+                        { id: 's2', dateLabel: '今天', time: '13:00', estimatedMinutes: 90, customerId: 'c2', petId: 'p2' },
+                        { id: 's3', dateLabel: '今天', time: '15:00', estimatedMinutes: 60, customerId: 'c2', petId: 'p3' }
+                    ]
+                }
+            },
+            computed: {
+                viewTitle() {
+                    const titles = { 'schedule': '預約排程', 'pets': '毛孩檔案 (快速檢視)', 'profile': '毛孩專屬檔案', 'report': '營收與數據', 'groomerProfile': '系統設置與價目表' };
+                    return titles[this.currentView];
+                },
+                // 修正：排程過濾與每日工作量統計
+                filteredSchedule() { 
+                    return this.schedule.filter(s => this.scheduleTab === 'week' || s.dateLabel === '今天');
+                },
+                todayTotalHours() {
+                    const totalMins = this.schedule.filter(s => s.dateLabel === '今天').reduce((sum, s) => sum + s.estimatedMinutes, 0);
+                    return (totalMins / 60).toFixed(1);
+                },
+                // 修正：以寵物為中心的搜尋過濾
+                filteredPets() { 
+                    const query = this.searchQuery.toLowerCase().trim();
+                    const allPets = Object.values(this.pets);
+                    if (!query) return allPets;
+                    return allPets.filter(p => {
+                        const owner = this.getCustomer(this.customers.find(c => c.pets.includes(p.id))?.id);
+                        return p.name.includes(query) || p.breed.includes(query) || (owner && owner.phone.includes(query)) || (owner && owner.name.includes(query));
+                    });
+                },
+                activeCustomer() { return this.customers.find(c => c.pets.includes(this.activePetId)); },
+                activePet() { return this.pets[this.activePetId]; }
+            },
+            methods: {
+                changeView(view) {
+                    if (this.currentView !== 'profile') this.previousView = this.currentView;
+                    this.currentView = view;
+                    this.isEditing = false;
+                },
+                onTransitionEnd() {
+                    // 確保畫面轉換完全結束，DOM節點已經確實存在後才呼叫畫圖
+                    if (this.currentView === 'report') {
+                        this.renderChart();
+                    }
+                },
+                getCustomer(id) { return this.customers.find(c => c.id === id); },
+                getPet(id) { return this.pets[id]; },
+                goToProfile(customerId, petId = null) {
+                    this.previousView = this.currentView;
+                    this.activeCustomerId = customerId;
+                    this.activePetId = petId ? petId : this.getCustomer(customerId).pets[0];
+                    this.currentView = 'profile';
+                },
+                addHistoryRecord() {
+                    const today = new Date().toISOString().split('T')[0];
+                    this.activePet.history.unshift({
+                        id: 'h' + Date.now(),
+                        date: today,
+                        mainService: '點擊編輯服務',
+                        styling: '',
+                        shampoo: '',
+                        photos: [],
+                        totalPrice: 0,
+                        extraFees: '',
+                        internalNote: '',
+                        handover: { checked: false, notes: '' }
+                    });
+                },
+                renderChart() {
+                    const ctx = document.getElementById('usageChart');
+                    // 雙重保險：如果還是抓不到畫布就直接 return 避免噴錯
+                    if (!ctx) return;
+                    
+                    if (this.chartInstance) { this.chartInstance.destroy(); }
+                    
+                    // 改為長條圖 (bar)
+                    this.chartInstance = new Chart(ctx, {
+                        type: 'bar',
+                        data: {
+                            labels: ['基礎洗澡', '全身大修', '局部小修', '加價服務 (藥浴/拆結)'],
+                            datasets: [{
+                                label: '本月使用次數',
+                                data: [65, 42, 18, 35],
+                                backgroundColor: ['#3b82f6', '#8b5cf6', '#06b6d4', '#f59e0b'],
+                                borderRadius: 6
+                            }]
+                        },
+                        options: { 
+                            responsive: true, 
+                            maintainAspectRatio: false, 
+                            plugins: { legend: { display: false } },
+                            scales: { y: { beginAtZero: true } }
+                        }
+                    });
+                }
+            }
+        }).mount('#app')
+    </script>
+</body>
+</html>
